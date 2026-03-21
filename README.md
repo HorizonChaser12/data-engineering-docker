@@ -101,7 +101,6 @@ The `-v pgadmin_data:/var/lib/pgadmin` volume mapping saves pgAdmin settings (se
 - As pgAdmin is a web bases tool, the deafult port is `80`, we are re-routing to `8085` port in our localhost to avoid conflicts.
 - Image name is `dpage/pgadmin4`
 
-
 ## Docker Networks
 
 Creating a virtual docker network:
@@ -118,9 +117,9 @@ docker network create pg-network
 # Run postgres on the virtual network we created earlier
 
 docker run -it \
-  -e POSTGRES_USER = "root" \
-  -e POSTGRES_PASSOWRD = "root" \
-  -e POSTGRES_DB = "ny_taxi" \
+  -e POSTGRES_USER="root" \
+  -e POSTGRES_PASSWORD="root" \
+  -e POSTGRES_DB="ny_taxi" \
   -v ny_taxi_postgres_data:/var/lib/postgresql \
   -p 5432:5432 \
   --network=pg-network \
@@ -131,13 +130,79 @@ docker run -it \
 # In another terminal run pgAdmin on the same virtual network
 
 docker run -it \
-  -e PGADMIN_DEFAULT_EMAIL = "admin@admin.com" \
-  -e PGADMIN_DEFAULT_PASSWORD = "root" \
+  -e PGADMIN_DEFAULT_EMAIL="admin@admin.com" \
+  -e PGADMIN_DEFAULT_PASSWORD="root" \
   -v pgadmin_data:/var/lib/pgadmin \
   -p 8085:80 \
   --network=pg-network \
   --name pgadmin \
-  dpage\pgadmin4
+  dpage/pgadmin4
 
 ```
 
+### Connect pgAdmin to PostgreSQL
+
+Login into `http://localhost:8085` through web. Use the same email and password you used for running the container to log in.
+
+1. Open browser and go to `http://localhost:8085`
+2. Login with email: `admin@admin.com`, password: `root`
+3. Servers -> Register -> Server
+4. Configure:
+    - General tab: Name: `Local Docker`
+    - Connection tab:
+      - Host: `pgdatabase` (the container name)
+      - Port: `5432`
+      - Username: `root`
+      - Password: `root`
+5. Save
+
+<hr>
+
+## Building DockerFile and running the container through postgres
+
+Docker Command:
+
+```
+
+docker run -it \
+    --network=pg-network \
+    taxi_ingest:v001 \
+    --pg-user=root \
+    --pg-pass=root \
+    --pg-host=pgdatabase \
+    --pg-port=5432 \
+    --pg-db=ny_taxi \
+    --target-table=yellow_taxi_trips \
+    --schema=pipeline
+
+```
+
+Note:
+Since Postgres is running on a separate container, the host argument will have to point to the container name of Postgres `(pgdatabase)`.
+
+<hr>
+
+## Final Process
+
+Step 1:
+```
+# This will create our pgadmin and postgres together in one network named pg-network
+
+docker compose -f pipeline/docker-compose.yaml up -d
+
+```
+Step 2:
+```
+# This will create an image with your dockerfile to sync your code as well as using uv get back all your requirements that needs to be present in the container
+
+docker build -t taxi_ingest:v001 -f pipeline/dockerfile .
+```
+
+
+Step 3:
+```
+# This will trigger your ingest_data.py which is already created file through docker and it will interact with the pgdatabse we created above and will insert the data inside it.
+
+docker run -it --network=pg-network taxi_ingest:v001 --pg-user=root --pg-pass=root --pg-host=pgdatabase --pg-port=5432 --pg-db=ny_taxi --target-table=yellow_taxi_trips --schema=pipeline
+
+```

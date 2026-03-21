@@ -4,7 +4,7 @@
 import click
 import pandas as pd
 from tqdm.auto import tqdm
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 dtype = {
     "VendorID": "Int64",
@@ -41,10 +41,11 @@ parse_dates = [
 @click.option('--month', default=1, type=int, help='Month of the data')
 @click.option('--target-table', default='yellow_taxi_data', help='Target table name')
 @click.option('--chunksize', default=100000, type=int, help='Chunk size for reading CSV')
+@click.option('--schema', default='pipeline', help='PostgreSQL schema name')
 
 
 
-def run(pg_user, pg_pass, pg_host, pg_port, pg_db, year, month, target_table, chunksize):
+def run(pg_user, pg_pass, pg_host, pg_port, pg_db, year, month, target_table, chunksize, schema):
     """Ingest NYC taxi data into Postgres"""
     
     # To connect the postgres database using SQLAlchemy
@@ -68,13 +69,19 @@ def run(pg_user, pg_pass, pg_host, pg_port, pg_db, year, month, target_table, ch
     # A flag to insert the data only once during the first iteration.
     first = True
 
+    # Create schema if it doesn't exist
+    with engine.connect() as conn:
+        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+        conn.commit()
+    
     for df_chunk in tqdm(df_iter):
     # insert the DataFrame with 0 rows but ALL columns with datatypes, create table schema (no data)
         if first:
             df_chunk.head(0).to_sql(
             name=target_table,
             con=engine,
-            if_exists="replace"
+            if_exists="replace",
+            schema=schema
             )
             first = False
             print("Table created")
@@ -82,7 +89,8 @@ def run(pg_user, pg_pass, pg_host, pg_port, pg_db, year, month, target_table, ch
         df_chunk.to_sql(
             name=target_table,
             con=engine,
-            if_exists="append"
+            if_exists="append",
+            schema=schema
         )
         print("Inserted:", len(df_chunk))
 

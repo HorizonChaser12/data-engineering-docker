@@ -1,0 +1,23 @@
+FROM python:3.13.11-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
+
+WORKDIR /code
+ENV PATH="/code/.venv/bin:$PATH"
+
+COPY pyproject.toml .python-version uv.lock ./
+RUN uv sync --locked
+
+COPY pipeline/ingest_data.py .
+
+ENTRYPOINT ["uv", "run", "python", "ingest_data.py"]
+
+
+# Explanation of all the things:
+    # Start with the smaller version of Python 3.13 slim
+    # copy uv from the official uv image 
+    # set working directory to /code
+    # change the code interpreter to the python environment you are gonna use
+    # copy all the uv files from your local directory to the container 
+    # using that lock file sync all the dependencies and everything that needs to be present for the code to run smoothly
+    # copy our ingestion python file
+    # Order of execution on how thing will execute and what will trigger first and who will trigger what...mostly the entry points
